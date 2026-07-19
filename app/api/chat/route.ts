@@ -4,13 +4,9 @@ export const maxDuration = 60;
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
 export async function POST(request: Request) {
-  const userApiKey = request.headers.get("x-openrouter-key")?.trim();
-  const baseUrl = userApiKey
-    ? "https://openrouter.ai/api/v1"
-    : (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
-  const apiKey = userApiKey || process.env.OPENAI_API_KEY;
-  if (!apiKey && baseUrl === "https://api.openai.com/v1") {
-    return Response.json({ error: "Ask paper needs an OPENAI_API_KEY in your .env.local file." }, { status: 503 });
+  const apiKey = request.headers.get("x-openrouter-key")?.trim();
+  if (!apiKey) {
+    return Response.json({ error: "Connect OpenRouter before asking the paper a question." }, { status: 401 });
   }
 
   try {
@@ -18,24 +14,22 @@ export async function POST(request: Request) {
     if (!body.paperText || !Array.isArray(body.messages) || body.messages.length === 0) {
       return Response.json({ error: "A paper and question are required." }, { status: 400 });
     }
-    if (body.model && !/^[a-zA-Z0-9_~.:/-]{1,200}$/.test(body.model)) {
-      return Response.json({ error: "The selected model name is invalid." }, { status: 400 });
-    }
-    if (userApiKey && !body.model) {
+    if (!body.model || !/^[a-zA-Z0-9_~.:/-]{1,200}$/.test(body.model)) {
       return Response.json({ error: "Choose an OpenRouter model in Ask paper settings." }, { status: 400 });
     }
 
     const pages = body.paperText.slice(0, 100_000);
 
-    const upstream = await fetch(`${baseUrl}/chat/completions`, {
+    const upstream = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-        ...(baseUrl === "https://openrouter.ai/api/v1" ? { "HTTP-Referer": new URL(request.url).origin, "X-OpenRouter-Title": "Margin" } : {}),
+        Authorization: `Bearer ${apiKey}`,
+        "HTTP-Referer": new URL(request.url).origin,
+        "X-OpenRouter-Title": "Margin",
       },
       body: JSON.stringify({
-        model: body.model || process.env.OPENAI_MODEL || "gpt-4.1-mini",
+        model: body.model,
         temperature: 0.2,
         stream: true,
         messages: [
