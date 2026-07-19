@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { diffWordsWithSpace } from "diff";
+import Image from "next/image";
 import Link from "next/link";
 import { KeyboardEvent, ReactNode, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -65,6 +66,17 @@ type DiffChange = { value: string; added?: boolean; removed?: boolean };
 type PolishProposal = { polished: string; changes: DiffChange[] };
 
 const MAX_PDF_BYTES = 30 * 1024 * 1024;
+const VENUE_LOGOS: Record<ReviewConfigurationId, { src: string; width: number; height: number; inverse?: boolean }> = {
+  "acl-arr": { src: "/venues/acl-arr.png", width: 594, height: 542 },
+  iclr: { src: "/venues/iclr.svg", width: 107, height: 89 },
+  neurips: { src: "/venues/neurips.svg", width: 36, height: 36 },
+  icml: { src: "/venues/icml.svg", width: 99, height: 98 },
+  cvpr: { src: "/venues/cvpr.svg", width: 354, height: 87, inverse: true },
+  iccv: { src: "/venues/iccv.svg", width: 1363, height: 375 },
+  eccv: { src: "/venues/eccv.svg", width: 430, height: 189 },
+  aaai: { src: "/venues/aaai.jpg", width: 1001, height: 141 },
+  aistats: { src: "/venues/aistats.svg", width: 1684, height: 900 },
+};
 
 function emptyReview(configuration: ReviewConfiguration): Review {
   return Object.fromEntries(configuration.fields.map((field) => [field.id, ""]));
@@ -1104,8 +1116,26 @@ export function ReviewDesk() {
               <span><strong>Start a review cycle</strong><small>Open a named folder of papers</small></span>
               <ChevronRight size={17} />
             </button>
+            <div className="venue-support" aria-label="Supported review venues">
+              <span>Venue-ready review forms</span>
+              <div className="venue-logo-grid">
+                {REVIEW_CONFIGURATIONS.map((configuration) => {
+                  const logo = VENUE_LOGOS[configuration.id];
+                  return (
+                    <span className={`venue-logo${logo.inverse ? " inverse" : ""}`} title={configuration.venue} key={configuration.id}>
+                      <Image src={logo.src} width={logo.width} height={logo.height} alt={`${configuration.venue} logo`} unoptimized />
+                    </span>
+                  );
+                })}
+              </div>
+              <small className="venue-marks-note">Conference names and marks belong to their respective organizations; no affiliation is implied.</small>
+            </div>
             {cycles.length > 0 && <div className="recent-cycles">{cycles.slice(0, 3).map((cycle) => <button type="button" key={cycle.id} onClick={() => void openCycle(cycle)}>{cycle.name}<span>{cycle.reviewed.length}/{cycle.papers.length}</span></button>)}</div>}
             {loadError && <div className="load-error"><span>{loadError}</span></div>}
+            <p className="ethics-note" role="note">
+              <ShieldAlert size={12} />
+              <span><strong>Not a replacement for reviewers.</strong> Margin does not review papers for you — AI features assist with reading and prose only, and every judgment remains your responsibility as the human reviewer.</span>
+            </p>
             <span className="privacy-note">PDFs are read from your folder · drafts and extracted chat text stay in this browser</span>
           </div>
         </section>
