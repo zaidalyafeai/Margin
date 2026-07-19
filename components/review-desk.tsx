@@ -35,6 +35,7 @@ import { KeyboardEvent, ReactNode, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { OpenRouterConnection, OpenRouterSettings } from "@/components/openrouter-settings";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   getReviewConfiguration,
   isReviewConfigurationId,
@@ -272,11 +273,31 @@ function ReviewPanel({
   );
 }
 
+function linkifyCitations(text: string) {
+  return text.replace(/\[([^\]\n]+)\](?!\()/g, (group, inner: string) => {
+    if (!/pp?\./i.test(inner)) return group;
+    const itemPattern = /pp?\.\s*\d+(?:\s*[-–—]\s*\d+)?|\d+(?:\s*[-–—]\s*\d+)?/gi;
+    if (inner.replace(itemPattern, "").replace(/[,;\s]/g, "") !== "") return group;
+    const items = inner.match(itemPattern) ?? [];
+    if (!items.length) return group;
+    const links = items.map((item) => {
+      const label = item.trim();
+      return `[${label}](#paper-page-${label.match(/\d+/)?.[0]})`;
+    });
+    if (links.length === 1) return links[0];
+    let cursor = 0;
+    let result = "[";
+    items.forEach((item, index) => {
+      const position = inner.indexOf(item, cursor);
+      result += inner.slice(cursor, position) + links[index];
+      cursor = position + item.length;
+    });
+    return result + inner.slice(cursor) + "]";
+  });
+}
+
 function MarkdownMessage({ children, onPage }: { children: string; onPage: (page: number) => void }) {
-  const markdown = children.replace(
-    /\[(pp?\.\s*(\d+)(?:\s*[-–—]\s*\d+)?)\](?!\()/gi,
-    (_citation, label, firstPage) => `[${label}](#paper-page-${firstPage})`,
-  );
+  const markdown = linkifyCitations(children);
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -941,6 +962,24 @@ export function ReviewDesk() {
     }
   }
 
+  function returnToLanding() {
+    persistCurrentReview();
+    extractionRequestRef.current += 1;
+    setActiveCycleId("");
+    setActivePaperName("");
+    setPaperId("");
+    setPaperName("");
+    setPaperText("");
+    setPdfSrc("");
+    reviewRef.current = {};
+    setReview({});
+    setMessages([]);
+    setLoadError("");
+    setShowCycleManager(false);
+    setTab("review");
+    setMobileView("paper");
+  }
+
   function changePage(page: number) {
     const nextPage = Math.max(1, page);
     setPdfPage(nextPage);
@@ -1027,11 +1066,12 @@ export function ReviewDesk() {
         onChange={(event) => void handleFallbackFolder(event.target.files)}
       />
       <header className="topbar">
-        <Link className="brand" href="/" aria-label="Margin home">
+        <Link className="brand" href="/" aria-label="Margin home" onClick={returnToLanding}>
           <span className="brand-mark"><span>M</span></span>
           <span><strong>Margin</strong><small>Paper review desk</small></span>
         </Link>
         <div className="header-tools">
+          <ThemeToggle />
           <button className="cycles-button" type="button" onClick={() => setShowCycleManager(true)}><Layers3 size={14} /> Cycles{cycles.length ? ` · ${cycles.length}` : ""}</button>
           <button
             className={`openrouter-button ${openRouterConnection.apiKey && openRouterConnection.model ? "connected" : ""}`}
