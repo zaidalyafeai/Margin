@@ -1,7 +1,8 @@
+import { REVIEW_FIELD_LABELS } from "@/lib/review-configs";
+
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const REVIEW_FIELDS = new Set(["Summary", "Strengths", "Weaknesses", "Comments and typos"]);
 const OPENROUTER_TIMEOUT_MS = 40_000;
 
 export async function POST(request: Request) {
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
     if (!body.model || !/^[a-zA-Z0-9_~.:/-]{1,200}$/.test(body.model)) {
       return Response.json({ error: "Choose an OpenRouter model before polishing." }, { status: 400 });
     }
-    if (!body.field || !REVIEW_FIELDS.has(body.field)) {
+    if (!body.field || !REVIEW_FIELD_LABELS.has(body.field)) {
       return Response.json({ error: "The review field is invalid." }, { status: 400 });
     }
 

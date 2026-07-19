@@ -1,3 +1,9 @@
+import {
+  DEFAULT_REVIEW_CONFIGURATION_ID,
+  getReviewConfiguration,
+  ReviewConfiguration,
+} from "@/lib/review-configs";
+
 export interface ReviewDirectoryHandle {
   kind: "directory";
   name: string;
@@ -19,6 +25,7 @@ export type ReviewCycle = {
   papers: CyclePaper[];
   reviewed: string[];
   createdAt: number;
+  configuration: ReviewConfiguration;
   handle?: ReviewDirectoryHandle;
 };
 
@@ -58,7 +65,11 @@ export async function listReviewCycles() {
     const request = database.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).getAll();
     request.onsuccess = () => {
       database.close();
-      resolve((request.result as ReviewCycle[]).sort((a, b) => b.createdAt - a.createdAt));
+      const cycles = (request.result as Partial<ReviewCycle>[]).map((cycle) => ({
+        ...cycle,
+        configuration: cycle.configuration ?? getReviewConfiguration(DEFAULT_REVIEW_CONFIGURATION_ID),
+      })) as ReviewCycle[];
+      resolve(cycles.sort((a, b) => b.createdAt - a.createdAt));
     };
     request.onerror = () => {
       database.close();

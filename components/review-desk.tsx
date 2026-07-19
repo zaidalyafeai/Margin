@@ -36,6 +36,13 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { OpenRouterConnection, OpenRouterSettings } from "@/components/openrouter-settings";
 import {
+  getReviewConfiguration,
+  isReviewConfigurationId,
+  REVIEW_CONFIGURATIONS,
+  ReviewConfiguration,
+  ReviewConfigurationId,
+} from "@/lib/review-configs";
+import {
   CyclePaper,
   deleteReviewCycle,
   getCachedPaperText,
@@ -49,8 +56,7 @@ import {
 
 type WorkspaceTab = "review" | "chat";
 type MobileView = "papers" | "paper" | WorkspaceTab;
-type ReviewKey = "summary" | "strengths" | "weaknesses" | "comments";
-type Review = Record<ReviewKey, string>;
+type Review = Record<string, string>;
 type Message = { role: "user" | "assistant"; content: string };
 type ExtractionStatus = "idle" | "extracting" | "ready" | "error";
 type PolishRequest = { controller: AbortController; timedOut: boolean };
@@ -59,13 +65,9 @@ type PolishProposal = { polished: string; changes: DiffChange[] };
 
 const MAX_PDF_BYTES = 30 * 1024 * 1024;
 
-const EMPTY_REVIEW: Review = { summary: "", strengths: "", weaknesses: "", comments: "" };
-const REVIEW_FIELDS: { key: ReviewKey; label: string; hint: string; number: string }[] = [
-  { key: "summary", label: "Summary", hint: "Describe the paper’s goal, approach, and main result.", number: "01" },
-  { key: "strengths", label: "Strengths", hint: "What is technically sound, novel, or especially useful?", number: "02" },
-  { key: "weaknesses", label: "Weaknesses", hint: "What is unclear, unsupported, or missing from the evaluation?", number: "03" },
-  { key: "comments", label: "Comments and typos", hint: "Add questions, detailed feedback, and corrections with page references.", number: "04" },
-];
+function emptyReview(configuration: ReviewConfiguration): Review {
+  return Object.fromEntries(configuration.fields.map((field) => [field.id, ""]));
+}
 
 function paperKey(url: string) {
   return `margin:review:${url}`;
@@ -76,6 +78,7 @@ function countWords(value: string) {
 }
 
 function ReviewPanel({
+  configuration,
   review,
   onChange,
   connection,
@@ -86,8 +89,9 @@ function ReviewPanel({
   reviewed,
   onToggleReviewed,
 }: {
+  configuration: ReviewConfiguration;
   review: Review;
-  onChange: (key: ReviewKey, value: string) => void;
+  onChange: (key: string, value: string) => void;
   connection: OpenRouterConnection;
   onOpenProviderSettings: () => void;
   saveState: "saved" | "saving";
@@ -96,11 +100,11 @@ function ReviewPanel({
   reviewed?: boolean;
   onToggleReviewed?: () => void;
 }) {
-  const [collapsed, setCollapsed] = useState<ReviewKey[]>([]);
+  const [collapsed, setCollapsed] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
-  const [polishing, setPolishing] = useState<ReviewKey | null>(null);
-  const [polishError, setPolishError] = useState<{ key: ReviewKey; message: string } | null>(null);
-  const [polishProposals, setPolishProposals] = useState<Partial<Record<ReviewKey, PolishProposal>>>({});
+  const [polishing, setPolishing] = useState<string | null>(null);
+  const [polishError, setPolishError] = useState<{ key: string; message: string } | null>(null);
+  const [polishProposals, setPolishProposals] = useState<Partial<Record<string, PolishProposal>>>({});
   const polishRequestRef = useRef<PolishRequest | null>(null);
 
   useEffect(() => () => polishRequestRef.current?.controller.abort(), []);
@@ -111,7 +115,7 @@ function ReviewPanel({
     window.setTimeout(() => setCopied(false), 1600);
   }
 
-  async function polishField(key: ReviewKey, label: string) {
+  async function polishField(key: string, label: string) {
     if (!review[key].trim() || polishing) return;
     if (!connection.apiKey || !connection.model) {
       setPolishError({ key, message: "Connect OpenRouter and choose a model to polish this field." });
@@ -156,7 +160,7 @@ function ReviewPanel({
     }
   }
 
-  function resolvePolishProposal(key: ReviewKey, accept: boolean) {
+  function resolvePolishProposal(key: string, accept: boolean) {
     const proposal = polishProposals[key];
     if (accept && proposal) onChange(key, proposal.polished);
     setPolishProposals((current) => {
@@ -170,7 +174,7 @@ function ReviewPanel({
     <div className="review-panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Structured review</p>
+          <p className="eyebrow">Structured review · {configuration.venue}</p>
           <h2>Build your assessment</h2>
         </div>
         <div className="save-state" aria-live="polite">
@@ -180,11 +184,11 @@ function ReviewPanel({
       </div>
 
       <div className="review-fields">
-        {REVIEW_FIELDS.map((field) => {
-          const isCollapsed = collapsed.includes(field.key);
-          const proposal = polishProposals[field.key];
+        {configuration.fields.map((field, index) => {
+          const isCollapsed = collapsed.includes(field.id);
+          const proposal = polishProposals[field.id];
           return (
-            <section className={`review-field ${isCollapsed ? "is-collapsed" : ""}`} key={field.key}>
+            <section className={`review-field ${isCollapsed ? "is-collapsed" : ""}`} key={field.id}>
               <div className="field-header">
                 <button
                   className="field-heading"
@@ -192,24 +196,24 @@ function ReviewPanel({
                   aria-expanded={!isCollapsed}
                   onClick={() =>
                     setCollapsed((current) =>
-                      current.includes(field.key) ? current.filter((key) => key !== field.key) : [...current, field.key],
+                      current.includes(field.id) ? current.filter((key) => key !== field.id) : [...current, field.id],
                     )
                   }
                 >
-                  <span className="field-number">{field.number}</span>
+                  <span className="field-number">{String(index + 1).padStart(2, "0")}</span>
                   <span>{field.label}</span>
-                  <span className="field-count">{countWords(review[field.key])} words</span>
+                  <span className="field-count">{countWords(review[field.id] || "")} words</span>
                   <ChevronDown size={16} />
                 </button>
                 <button
                   className="polish-button"
                   type="button"
                   title={`Polish ${field.label.toLowerCase()} with ${connection.model || "OpenRouter"}`}
-                  disabled={!review[field.key].trim() || Boolean(proposal) || (polishing !== null && polishing !== field.key)}
-                  onClick={() => polishing === field.key ? polishRequestRef.current?.controller.abort() : void polishField(field.key, field.label)}
+                  disabled={!review[field.id]?.trim() || Boolean(proposal) || (polishing !== null && polishing !== field.id)}
+                  onClick={() => polishing === field.id ? polishRequestRef.current?.controller.abort() : void polishField(field.id, field.label)}
                 >
-                  {polishing === field.key ? <Square size={11} /> : <Sparkles size={13} />}
-                  {polishing === field.key ? "Stop" : "Polish"}
+                  {polishing === field.id ? <Square size={11} /> : <Sparkles size={13} />}
+                  {polishing === field.id ? "Stop" : "Polish"}
                 </button>
               </div>
               {!isCollapsed && (
@@ -230,19 +234,19 @@ function ReviewPanel({
                         ))}
                       </div>
                       <div className="proposal-actions">
-                        <button className="proposal-discard" type="button" onClick={() => resolvePolishProposal(field.key, false)}><X size={13} /> Discard</button>
-                        <button className="proposal-accept" type="button" onClick={() => resolvePolishProposal(field.key, true)}><Check size={13} /> Accept changes</button>
+                        <button className="proposal-discard" type="button" onClick={() => resolvePolishProposal(field.id, false)}><X size={13} /> Discard</button>
+                        <button className="proposal-accept" type="button" onClick={() => resolvePolishProposal(field.id, true)}><Check size={13} /> Accept changes</button>
                       </div>
                     </div>
                   ) : (
                     <textarea
                       aria-label={field.label}
-                      placeholder={field.hint}
-                      value={review[field.key]}
-                      onChange={(event) => onChange(field.key, event.target.value)}
+                      placeholder={`Write your ${field.label.toLowerCase()} here.`}
+                      value={review[field.id] || ""}
+                      onChange={(event) => onChange(field.id, event.target.value)}
                     />
                   )}
-                  {polishError?.key === field.key && <p className="polish-error" role="alert">{polishError.message}</p>}
+                  {polishError?.key === field.id && <p className="polish-error" role="alert">{polishError.message}</p>}
                 </>
               )}
             </section>
@@ -458,6 +462,8 @@ function CycleManager({
   activeCycleId,
   cycleName,
   setCycleName,
+  configurationId,
+  setConfigurationId,
   creating,
   error,
   onCreate,
@@ -471,6 +477,8 @@ function CycleManager({
   activeCycleId: string;
   cycleName: string;
   setCycleName: (name: string) => void;
+  configurationId: ReviewConfigurationId | "";
+  setConfigurationId: (id: ReviewConfigurationId | "") => void;
   creating: boolean;
   error: string;
   onCreate: () => void;
@@ -492,16 +500,33 @@ function CycleManager({
         </div>
 
         <div className="new-cycle-form">
-          <label htmlFor="cycle-name">Cycle name <span>(optional)</span></label>
-          <div>
-            <input id="cycle-name" placeholder="Uses the folder name" value={cycleName} onChange={(event) => setCycleName(event.target.value)} />
-            <button className="primary-button" type="button" disabled={creating} onClick={onCreate}>
+          <div className="cycle-form-fields">
+            <label>
+              <span>Review venue</span>
+              <select
+                value={configurationId}
+                onChange={(event) => setConfigurationId(isReviewConfigurationId(event.target.value) ? event.target.value : "")}
+                required
+              >
+                <option value="">Select a venue</option>
+                {REVIEW_CONFIGURATIONS.map((configuration) => (
+                  <option value={configuration.id} key={configuration.id}>{configuration.venue}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Cycle name <small>(optional)</small></span>
+              <input id="cycle-name" placeholder="Uses the folder name" value={cycleName} onChange={(event) => setCycleName(event.target.value)} />
+            </label>
+          </div>
+          <div className="cycle-folder-action">
+            <button className="primary-button" type="button" disabled={creating || !configurationId} onClick={onCreate}>
               {creating ? <LoaderCircle className="spin" size={15} /> : <FolderPlus size={15} />}
               Choose folder
             </button>
           </div>
-          <small>Choose a folder containing PDFs. Its name becomes the cycle name unless you enter one above. Subfolders are ignored.</small>
-          <button className="folder-fallback" type="button" disabled={creating} onClick={onFallbackCreate}>
+          <small>Select the venue form, then choose a folder containing PDFs. Subfolders are ignored.</small>
+          <button className="folder-fallback" type="button" disabled={creating || !configurationId} onClick={onFallbackCreate}>
             Folder picker not opening? Use standard folder selection
           </button>
           {error && <div className="cycle-form-error">{error}</div>}
@@ -514,7 +539,7 @@ function CycleManager({
             <article className={cycle.id === activeCycleId ? "active" : ""} key={cycle.id}>
               <button className="cycle-open" type="button" onClick={() => onOpen(cycle)}>
                 <span className="cycle-folder"><FolderOpen size={17} /></span>
-                <span><strong>{cycle.name}</strong><small>{cycle.reviewed.length} of {cycle.papers.length} reviewed</small></span>
+                <span><strong>{cycle.name}</strong><small>{cycle.configuration.venue} · {cycle.reviewed.length} of {cycle.papers.length} reviewed</small></span>
               </button>
               <button className="cycle-action" type="button" aria-label={`Rename ${cycle.name}`} onClick={() => onRename(cycle)}>Rename</button>
               <button className="cycle-action danger" type="button" aria-label={`Remove ${cycle.name}`} onClick={() => onRemove(cycle)}><Trash2 size={14} /></button>
@@ -551,7 +576,7 @@ function PaperNavigator({
     <aside className="cycle-sidebar" aria-label={`${cycle.name} papers`}>
       <div className="cycle-sidebar-heading">
         <div className="cycle-title-row">
-          <button type="button" onClick={onManage}><span>Review cycle</span><strong>{cycle.name}</strong></button>
+          <button type="button" onClick={onManage}><span>Review cycle · {cycle.configuration.venue}</span><strong>{cycle.name}</strong></button>
           <button className="collapse-cycle" type="button" aria-label="Hide review cycle sidebar" onClick={onCollapse}><PanelLeftClose size={16} /></button>
         </div>
         <div className="cycle-progress"><span><strong>{cycle.reviewed.length}</strong> / {cycle.papers.length} reviewed</span><i><b style={{ width: `${progress}%` }} /></i></div>
@@ -584,11 +609,10 @@ export function ReviewDesk() {
   const [paperText, setPaperText] = useState("");
   const [pdfSrc, setPdfSrc] = useState("");
   const [pdfPage, setPdfPage] = useState(1);
-  const [review, setReview] = useState<Review>(EMPTY_REVIEW);
+  const [review, setReview] = useState<Review>({});
   const [messages, setMessages] = useState<Message[]>([]);
   const [tab, setTab] = useState<WorkspaceTab>("review");
   const [mobileView, setMobileView] = useState<MobileView>("paper");
-  const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [extractionStatus, setExtractionStatus] = useState<ExtractionStatus>("idle");
   const [extractionError, setExtractionError] = useState("");
@@ -599,11 +623,14 @@ export function ReviewDesk() {
   const [showCycleManager, setShowCycleManager] = useState(false);
   const [cycleSidebarCollapsed, setCycleSidebarCollapsed] = useState(false);
   const [cycleName, setCycleName] = useState("");
+  const [configurationId, setConfigurationId] = useState<ReviewConfigurationId | "">("");
   const [creatingCycle, setCreatingCycle] = useState(false);
   const [fallbackCycleId, setFallbackCycleId] = useState("");
   const [openRouterConnection, setOpenRouterConnection] = useState<OpenRouterConnection>({ apiKey: "", model: "" });
   const [showProviderSettings, setShowProviderSettings] = useState(false);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const loadingRef = useRef(false);
+  const reviewRef = useRef<Review>({});
   const cycleFilesRef = useRef(new Map<string, Map<string, File>>());
   const paperTextCacheRef = useRef(new Map<string, { size: number; lastModified: number; text: string }>());
   const extractionPromisesRef = useRef(new Map<string, Promise<string>>());
@@ -637,14 +664,27 @@ export function ReviewDesk() {
     return () => window.clearTimeout(timer);
   }, [paperId, review]);
 
-  function restoreReview(id: string) {
+  function restoreReview(id: string, configuration: ReviewConfiguration) {
     const saved = localStorage.getItem(paperKey(id));
-    setReview(saved ? { ...EMPTY_REVIEW, ...JSON.parse(saved) } : EMPTY_REVIEW);
+    const next = emptyReview(configuration);
+    if (saved) {
+      try {
+        const stored = JSON.parse(saved) as Record<string, unknown>;
+        for (const field of configuration.fields) {
+          const value = stored[field.id];
+          if (typeof value === "string") next[field.id] = value;
+        }
+      } catch {
+        // A malformed local draft should not prevent the paper from opening.
+      }
+    }
+    reviewRef.current = next;
+    setReview(next);
   }
 
   function persistCurrentReview() {
     if (!paperId) return;
-    localStorage.setItem(paperKey(paperId), JSON.stringify(review));
+    localStorage.setItem(paperKey(paperId), JSON.stringify(reviewRef.current));
     setSaveState("saved");
   }
 
@@ -689,9 +729,9 @@ export function ReviewDesk() {
     }
   }
 
-  async function openPdfFile(file: File, id: string, name: string, cycleId: string) {
-    if (loading) return;
-    setLoading(true);
+  async function openPdfFile(file: File, id: string, name: string, cycleId: string, configuration: ReviewConfiguration) {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setLoadError("");
     try {
       if (file.size > MAX_PDF_BYTES) throw new Error("This PDF is larger than the 30 MB limit.");
@@ -699,19 +739,21 @@ export function ReviewDesk() {
       if (new TextDecoder().decode(await file.slice(0, 5).arrayBuffer()) !== "%PDF-") throw new Error("The selected file is not a valid PDF.");
 
       setPdfSrc(URL.createObjectURL(file));
+      setActiveCycleId(cycleId);
+      setActivePaperName(name);
       setPaperId(id);
       setPaperName(name.replace(/\.pdf$/i, ""));
       setPaperText("");
       setPdfPage(1);
       setMessages([]);
-      restoreReview(id);
+      restoreReview(id, configuration);
       setMobileView("paper");
       const requestId = ++extractionRequestRef.current;
       void extractLocalPdf(file, requestId, id, cycleId);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "The PDF could not be loaded.");
     } finally {
-      setLoading(false);
+      loadingRef.current = false;
     }
   }
 
@@ -731,9 +773,8 @@ export function ReviewDesk() {
         setLoadError("Select the cycle folder again to restore access.");
         return;
       }
-      setActiveCycleId(cycle.id);
-      setActivePaperName(paper.name);
-      await openPdfFile(file, `cycle:${cycle.id}:${paper.name}`, paper.name, cycle.id);
+      persistCurrentReview();
+      await openPdfFile(file, `cycle:${cycle.id}:${paper.name}`, paper.name, cycle.id, cycle.configuration);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "This paper could not be opened.");
     }
@@ -750,14 +791,19 @@ export function ReviewDesk() {
       folderInputRef.current?.click();
       return;
     }
-    setActiveCycleId(cycle.id);
     setShowCycleManager(false);
     setMobileView("papers");
     if (cycle.papers.length) await openCyclePaper(cycle, cycle.papers[0]);
+    else setActiveCycleId(cycle.id);
   }
 
   async function createCycle() {
+    if (!configurationId) {
+      setLoadError("Select a review venue before choosing a folder.");
+      return;
+    }
     const requestedName = cycleName.trim();
+    const configuration = getReviewConfiguration(configurationId);
     const picker = (window as Window & { showDirectoryPicker?: () => Promise<ReviewDirectoryHandle> }).showDirectoryPicker;
     if (!picker) {
       setFallbackCycleId("__new__");
@@ -771,10 +817,19 @@ export function ReviewDesk() {
       const handle = await picker.call(window);
       const papers = await scanReviewFolder(handle);
       if (!papers.length) throw new Error("The selected folder does not contain any PDF files.");
-      const cycle: ReviewCycle = { id: crypto.randomUUID(), name: requestedName || handle.name, papers, reviewed: [], createdAt: Date.now(), handle };
+      const cycle: ReviewCycle = {
+        id: crypto.randomUUID(),
+        name: requestedName || handle.name,
+        papers,
+        reviewed: [],
+        createdAt: Date.now(),
+        configuration,
+        handle,
+      };
       await saveReviewCycle(cycle);
       setCycles((current) => [cycle, ...current]);
       setCycleName("");
+      setConfigurationId("");
       await openCycle(cycle);
     } catch (error) {
       if ((error as Error).name !== "AbortError") setLoadError(error instanceof Error ? error.message : "The review cycle could not be created.");
@@ -784,6 +839,10 @@ export function ReviewDesk() {
   }
 
   function createCycleWithFallback() {
+    if (!configurationId) {
+      setLoadError("Select a review venue before choosing a folder.");
+      return;
+    }
     setLoadError("");
     setFallbackCycleId("__new__");
     folderInputRef.current?.click();
@@ -813,9 +872,21 @@ export function ReviewDesk() {
       cycle = { ...existing, papers, reviewed: existing.reviewed.filter((name) => fileMap.has(name)) };
       setCycles((current) => current.map((item) => item.id === cycle.id ? cycle : item));
     } else {
-      cycle = { id: crypto.randomUUID(), name: cycleName.trim() || folderName, papers, reviewed: [], createdAt: Date.now() };
+      if (!configurationId) {
+        setLoadError("Select a review venue before choosing a folder.");
+        return;
+      }
+      cycle = {
+        id: crypto.randomUUID(),
+        name: cycleName.trim() || folderName,
+        papers,
+        reviewed: [],
+        createdAt: Date.now(),
+        configuration: getReviewConfiguration(configurationId),
+      };
       setCycles((current) => [cycle, ...current]);
       setCycleName("");
+      setConfigurationId("");
     }
     cycleFilesRef.current.set(cycle.id, fileMap);
     await saveReviewCycle(cycle);
@@ -848,6 +919,7 @@ export function ReviewDesk() {
 
   async function removeCycle(cycle: ReviewCycle) {
     if (!window.confirm(`Remove “${cycle.name}”? The folder and review drafts will not be deleted. Cached paper text for this cycle will be removed.`)) return;
+    if (activeCycleId === cycle.id) persistCurrentReview();
     removedCycleIdsRef.current.add(cycle.id);
     await deleteReviewCycle(cycle.id);
     for (const id of paperTextCacheRef.current.keys()) {
@@ -856,8 +928,16 @@ export function ReviewDesk() {
     setCycles((current) => current.filter((item) => item.id !== cycle.id));
     cycleFilesRef.current.delete(cycle.id);
     if (activeCycleId === cycle.id) {
+      extractionRequestRef.current += 1;
       setActiveCycleId("");
       setActivePaperName("");
+      setPaperId("");
+      setPaperName("");
+      setPaperText("");
+      setPdfSrc("");
+      reviewRef.current = {};
+      setReview({});
+      setMessages([]);
     }
   }
 
@@ -868,7 +948,10 @@ export function ReviewDesk() {
   }
 
   function markdownReview() {
-    return REVIEW_FIELDS.map((field) => `## ${field.label}\n\n${review[field.key].trim() || "_Not provided._"}`).join("\n\n");
+    if (!activeCycle) return "";
+    return activeCycle.configuration.fields
+      .map((field) => `## ${field.label}\n\n${review[field.id]?.trim() || "_Not provided._"}`)
+      .join("\n\n");
   }
 
   function exportReview() {
@@ -884,9 +967,13 @@ export function ReviewDesk() {
     await navigator.clipboard.writeText(markdownReview());
   }
 
-  function updateReview(key: ReviewKey, value: string) {
+  function updateReview(key: string, value: string) {
     setSaveState("saving");
-    setReview((current) => ({ ...current, [key]: value }));
+    setReview((current) => {
+      const next = { ...current, [key]: value };
+      reviewRef.current = next;
+      return next;
+    });
   }
 
   async function toggleReviewed() {
@@ -903,7 +990,12 @@ export function ReviewDesk() {
   function cyclePaperHasDraft(cycle: ReviewCycle, paper: CyclePaper) {
     try {
       const stored = localStorage.getItem(paperKey(`cycle:${cycle.id}:${paper.name}`));
-      return stored ? Object.values(JSON.parse(stored) as Review).some(Boolean) : false;
+      if (!stored) return false;
+      const draft = JSON.parse(stored) as Record<string, unknown>;
+      return cycle.configuration.fields.some((field) => {
+        const value = draft[field.id];
+        return typeof value === "string" && Boolean(value.trim());
+      });
     } catch {
       return false;
     }
@@ -955,7 +1047,7 @@ export function ReviewDesk() {
       </header>
       {paperId && loadError && <div className="load-banner"><span>{loadError}</span><button type="button" aria-label="Dismiss message" onClick={() => setLoadError("")}><X size={14} /></button></div>}
 
-      {!paperId ? (
+      {!paperId || !activeCycle ? (
         <section className="empty-state">
           <div className="empty-paper" aria-hidden="true">
             <span className="paper-line title" /><span className="paper-line" /><span className="paper-line short" />
@@ -1020,6 +1112,7 @@ export function ReviewDesk() {
               {tab === "review" ? (
                 <ReviewPanel
                   key={paperId}
+                  configuration={activeCycle.configuration}
                   review={review}
                   connection={openRouterConnection}
                   onOpenProviderSettings={() => setShowProviderSettings(true)}
@@ -1062,6 +1155,8 @@ export function ReviewDesk() {
           activeCycleId={activeCycleId}
           cycleName={cycleName}
           setCycleName={setCycleName}
+          configurationId={configurationId}
+          setConfigurationId={setConfigurationId}
           creating={creatingCycle}
           error={loadError}
           onCreate={() => void createCycle()}

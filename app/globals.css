@@ -279,11 +279,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .cycle-modal-heading .eyebrow { margin-bottom: 7px; }
 .cycle-modal-heading h2 { margin: 0; font: 560 25px/1.1 var(--font-serif), serif; }
 .new-cycle-form { flex: none; padding: 19px 27px; background: #f8f9fb; border-bottom: 1px solid var(--rule); }
-.new-cycle-form > label { display: block; margin-bottom: 7px; color: var(--slate); font: 500 9px/1 var(--font-mono), monospace; text-transform: uppercase; letter-spacing: .06em; }
-.new-cycle-form > label span { color: var(--muted); font-weight: 400; }
-.new-cycle-form > div { display: flex; gap: 8px; }
-.new-cycle-form input { min-width: 0; flex: 1; height: 38px; padding: 0 11px; border: 1px solid #cbd2dc; border-radius: 5px; background: white; font-size: 12px; }
+.cycle-form-fields { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 10px; }
+.cycle-form-fields label { min-width: 0; display: flex; flex-direction: column; gap: 7px; color: var(--slate); font: 500 9px/1 var(--font-mono), monospace; text-transform: uppercase; letter-spacing: .06em; }
+.cycle-form-fields label small { color: var(--muted); font: inherit; font-weight: 400; }
+.cycle-form-fields input, .cycle-form-fields select { width: 100%; min-width: 0; height: 38px; padding: 0 11px; border: 1px solid #cbd2dc; border-radius: 5px; background: white; color: var(--ink); font: 400 12px/1 var(--font-sans), sans-serif; text-transform: none; letter-spacing: 0; }
+.cycle-form-fields select { padding-right: 30px; }
+.cycle-form-fields input:focus, .cycle-form-fields select:focus { border-color: var(--blue); outline: 0; box-shadow: 0 0 0 3px rgba(49, 94, 251, .08); }
+.cycle-folder-action { display: flex; margin-top: 10px; }
 .new-cycle-form .primary-button { flex: none; }
+.new-cycle-form .primary-button:disabled, .folder-fallback:disabled { cursor: not-allowed; opacity: .48; }
 .new-cycle-form > small { display: block; margin-top: 8px; color: var(--muted); font-size: 9px; }
 .folder-fallback { margin-top: 10px; padding: 0; border: 0; background: transparent; color: var(--blue); font-size: 9px; font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
 .cycle-form-error { margin-top: 10px; padding: 8px 10px; border: 1px solid #efc8c8; border-radius: 4px; background: #fff4f4; color: var(--danger); font-size: 10px; }
@@ -363,7 +367,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   .provider-error { max-width: none; }
   .provider-footer > .primary-button { height: 36px; }
   .cycle-modal-heading, .new-cycle-form { padding-inline: 18px; }
-  .new-cycle-form > div { display: grid; }
+  .cycle-form-fields { grid-template-columns: minmax(0, 1fr); }
   .new-cycle-form .primary-button { height: 38px; }
 }
 
