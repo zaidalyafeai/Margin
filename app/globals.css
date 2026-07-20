@@ -306,6 +306,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .message.user .message-role { color: var(--blue); }
 .message.assistant { padding-left: 15px; border-left: 2px solid var(--amber); }
 .citation { display: inline; margin: 0 2px; padding: 1px 4px; border: 0; border-radius: 2px; background: var(--amber-soft); color: var(--amber-ink); font: 500 10px/1.4 var(--font-mono), monospace; vertical-align: 1px; }
+.citation.invalid { opacity: .65; text-decoration: line-through; cursor: help; }
 .thinking { color: var(--slate); }
 .thinking::after { content: "…"; animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .25; } }

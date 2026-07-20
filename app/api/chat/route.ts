@@ -1,3 +1,5 @@
+import { formatPageNumbers, getAvailablePageNumbers } from "@/lib/citations";
+
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -19,6 +21,7 @@ export async function POST(request: Request) {
     }
 
     const pages = body.paperText.slice(0, 100_000);
+    const availablePages = formatPageNumbers(getAvailablePageNumbers(pages));
 
     const upstream = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -36,7 +39,7 @@ export async function POST(request: Request) {
           {
             role: "system",
             content:
-              "You are a careful research-paper assistant. Answer only from the supplied paper. Distinguish explicit claims from your inference. If the paper does not support an answer, say so. Cite evidence using [p. N] with the exact page number. Be concise but substantive.",
+              `You are a careful research-paper assistant. Answer only from the supplied paper. Distinguish explicit claims from your inference. If the paper does not support an answer, say so. Cite only the physical PDF page numbers shown in the page boundary markers (--- PDF PAGE N --- or --- PAGE N ---), never printed page labels or page numbers mentioned in the paper's prose or references. The only valid page numbers in this context are: ${availablePages}. Use [p. N] for one page and [pp. N-M] only for a consecutive range; cite disjoint pages separately. Never cite a number outside the valid list. Be concise but substantive.`,
           },
           { role: "system", content: `PAPER TEXT:\n${pages}` },
           ...body.messages.slice(-8),

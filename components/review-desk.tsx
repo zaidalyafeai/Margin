@@ -39,6 +39,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { OpenRouterConnection, OpenRouterSettings } from "@/components/openrouter-settings";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { getAvailablePageNumbers, linkifyCitations } from "@/lib/citations";
 import {
   getReviewConfiguration,
   isReviewConfigurationId,
@@ -291,37 +292,14 @@ function ReviewPanel({
   );
 }
 
-function linkifyCitations(text: string) {
-  return text.replace(/\[([^\]\n]+)\](?!\()/g, (group, inner: string) => {
-    if (!/pp?\./i.test(inner)) return group;
-    const itemPattern = /pp?\.\s*\d+(?:\s*[-–—]\s*\d+)?|\d+(?:\s*[-–—]\s*\d+)?/gi;
-    if (inner.replace(itemPattern, "").replace(/[,;\s]/g, "") !== "") return group;
-    const items = inner.match(itemPattern) ?? [];
-    if (!items.length) return group;
-    const links = items.map((item) => {
-      const label = item.trim();
-      return `[${label}](#paper-page-${label.match(/\d+/)?.[0]})`;
-    });
-    if (links.length === 1) return links[0];
-    let cursor = 0;
-    let result = "[";
-    items.forEach((item, index) => {
-      const position = inner.indexOf(item, cursor);
-      result += inner.slice(cursor, position) + links[index];
-      cursor = position + item.length;
-    });
-    return result + inner.slice(cursor) + "]";
-  });
-}
-
 function normalizeLatexDelimiters(text: string) {
   return text
     .replace(/\\\[([\s\S]*?)\\\]/g, (_, math: string) => `\n\n$$\n${math.trim()}\n$$\n\n`)
     .replace(/\\\(([^\n]*?)\\\)/g, (_, math: string) => `$${math.trim()}$`);
 }
 
-function MarkdownMessage({ children, onPage }: { children: string; onPage: (page: number) => void }) {
-  const markdown = linkifyCitations(normalizeLatexDelimiters(children));
+function MarkdownMessage({ children, onPage, availablePages }: { children: string; onPage: (page: number) => void; availablePages: number[] }) {
+  const markdown = linkifyCitations(normalizeLatexDelimiters(children), availablePages);
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath]}
@@ -329,8 +307,11 @@ function MarkdownMessage({ children, onPage }: { children: string; onPage: (page
       components={{
         a: ({ href, children: linkChildren }) => {
           const page = href?.match(/^#paper-page-(\d+)$/)?.[1];
+          const invalidPage = href?.match(/^#invalid-paper-page-(\d+)$/)?.[1];
           return page ? (
             <button className="citation" type="button" onClick={() => onPage(Number(page))}>{linkChildren}</button>
+          ) : invalidPage ? (
+            <span className="citation invalid" title="This citation includes pages that are not available in the extracted paper">{linkChildren}</span>
           ) : (
             <a href={href} target="_blank" rel="noreferrer">{linkChildren}</a>
           );
@@ -358,6 +339,7 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
   const [hasConsented, setHasConsented] = useState(!isLocal);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const availablePages = getAvailablePageNumbers(paperText);
   const suggestions = ["What is the central contribution?", "Explain the evaluation setup.", "Which limitations do the authors acknowledge?"];
 
   useEffect(() => {
@@ -471,7 +453,7 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
             <div className={`message ${message.role}`} key={`${message.role}-${index}`}>
               <span className="message-role">{message.role === "user" ? "You" : "Margin"}</span>
               <div className="message-content">
-                {message.content ? <MarkdownMessage onPage={onPage}>{message.content}</MarkdownMessage> : <span className="thinking">Reading the paper</span>}
+                {message.content ? <MarkdownMessage onPage={onPage} availablePages={availablePages}>{message.content}</MarkdownMessage> : <span className="thinking">Reading the paper</span>}
               </div>
             </div>
           ))
@@ -1130,7 +1112,7 @@ export function ReviewDesk() {
               <ChevronRight size={17} />
             </button>
             <div className="venue-support" aria-label="Supported review venues">
-              <span>Venue-ready review forms</span>
+              {/* <span>Venue-ready review forms</span> */}
               <div className="venue-logo-grid">
                 {REVIEW_CONFIGURATIONS.map((configuration) => {
                   const logo = VENUE_LOGOS[configuration.id];

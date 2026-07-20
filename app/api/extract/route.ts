@@ -7,6 +7,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const MAX_PDF_BYTES = 30 * 1024 * 1024;
+const MAX_EXTRACTED_TEXT_LENGTH = 100_000;
 
 export async function POST(request: Request) {
   try {
@@ -23,10 +24,18 @@ export async function POST(request: Request) {
     const parser = new PDFParse({ data: new Uint8Array(bytes) });
     const parsed = await parser.getText();
     await parser.destroy();
-    const text = parsed.pages
-      .map((page, index) => `--- PAGE ${index + 1} ---\n${page.text}`)
-      .join("\n\n")
-      .slice(0, 100_000);
+    const pageChunks: string[] = [];
+    let textLength = 0;
+    for (const page of parsed.pages) {
+      const chunk = `--- PDF PAGE ${page.num} ---\n${page.text}`;
+      const separatorLength = pageChunks.length ? 2 : 0;
+      const remainingLength = MAX_EXTRACTED_TEXT_LENGTH - textLength - separatorLength;
+      if (remainingLength <= 0) break;
+      pageChunks.push(chunk.slice(0, remainingLength));
+      textLength += separatorLength + pageChunks.at(-1)!.length;
+      if (chunk.length > remainingLength) break;
+    }
+    const text = pageChunks.join("\n\n");
 
     if (!text.trim()) return Response.json({ error: "No readable text was found in this PDF." }, { status: 422 });
     return Response.json({ text, pages: parsed.pages.length }, { headers: { "Cache-Control": "no-store" } });
