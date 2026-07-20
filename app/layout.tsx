@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, IBM_Plex_Mono, Source_Sans_3 } from "next/font/google";
+import "katex/dist/katex.min.css";
 import "./globals.css";
 
 const sourceSans = Source_Sans_3({ subsets: ["latin"], variable: "--font-sans" });

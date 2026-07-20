@@ -33,8 +33,10 @@ import { diffWordsWithSpace } from "diff";
 import Image from "next/image";
 import Link from "next/link";
 import { KeyboardEvent, ReactNode, useEffect, useRef, useState } from "react";
+import rehypeKatex from "rehype-katex";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import { OpenRouterConnection, OpenRouterSettings } from "@/components/openrouter-settings";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -66,7 +68,7 @@ type DiffChange = { value: string; added?: boolean; removed?: boolean };
 type PolishProposal = { polished: string; changes: DiffChange[] };
 
 const MAX_PDF_BYTES = 30 * 1024 * 1024;
-const VENUE_LOGOS: Record<ReviewConfigurationId, { src: string; width: number; height: number; inverse?: boolean }> = {
+const VENUE_LOGOS: Partial<Record<ReviewConfigurationId, { src: string; width: number; height: number; inverse?: boolean }>> = {
   "acl-arr": { src: "/venues/acl-arr.png", width: 594, height: 542 },
   iclr: { src: "/venues/iclr.svg", width: 107, height: 89 },
   neurips: { src: "/venues/neurips.svg", width: 36, height: 36 },
@@ -214,7 +216,10 @@ function ReviewPanel({
                   }
                 >
                   <span className="field-number">{String(index + 1).padStart(2, "0")}</span>
-                  <span>{field.label}</span>
+                  <span className="field-title">
+                    <span className="field-label">{field.label}</span>
+                    <span className="field-description" id={`${field.id}-description`}>{field.description}</span>
+                  </span>
                   <span className="field-count">{countWords(review[field.id] || "")} words</span>
                   <ChevronDown size={16} />
                 </button>
@@ -254,6 +259,7 @@ function ReviewPanel({
                   ) : (
                     <textarea
                       aria-label={field.label}
+                      aria-describedby={`${field.id}-description`}
                       placeholder={`Write your ${field.label.toLowerCase()} here.`}
                       value={review[field.id] || ""}
                       onChange={(event) => onChange(field.id, event.target.value)}
@@ -308,11 +314,18 @@ function linkifyCitations(text: string) {
   });
 }
 
+function normalizeLatexDelimiters(text: string) {
+  return text
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, math: string) => `\n\n$$\n${math.trim()}\n$$\n\n`)
+    .replace(/\\\(([^\n]*?)\\\)/g, (_, math: string) => `$${math.trim()}$`);
+}
+
 function MarkdownMessage({ children, onPage }: { children: string; onPage: (page: number) => void }) {
-  const markdown = linkifyCitations(children);
+  const markdown = linkifyCitations(normalizeLatexDelimiters(children));
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
       components={{
         a: ({ href, children: linkChildren }) => {
           const page = href?.match(/^#paper-page-(\d+)$/)?.[1];
@@ -1122,8 +1135,10 @@ export function ReviewDesk() {
                 {REVIEW_CONFIGURATIONS.map((configuration) => {
                   const logo = VENUE_LOGOS[configuration.id];
                   return (
-                    <span className={`venue-logo${logo.inverse ? " inverse" : ""}`} title={configuration.venue} key={configuration.id}>
-                      <Image src={logo.src} width={logo.width} height={logo.height} alt={`${configuration.venue} logo`} unoptimized />
+                    <span className={`venue-logo${logo?.inverse ? " inverse" : ""}`} title={configuration.venue} key={configuration.id}>
+                      {logo
+                        ? <Image src={logo.src} width={logo.width} height={logo.height} alt={`${configuration.venue} logo`} unoptimized />
+                        : <span className="venue-logo-text">{configuration.venue}</span>}
                     </span>
                   );
                 })}
