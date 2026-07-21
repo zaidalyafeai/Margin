@@ -2,6 +2,16 @@
 
 Margin is a browser-based workspace for reviewing research papers. Open a folder of PDFs, move through a review cycle, write structured feedback, and ask questions grounded in each paper.
 
+## Snapshot
+
+### Review workspace
+
+![Margin workspace reviewing the public CIDAR paper from arXiv](./public/margin-workspace.png)
+
+### Ask the paper
+
+![Margin Ask the Paper tab showing suggested questions for the public CIDAR paper](./public/margin-ask-paper.png)
+
 ## Features
 
 - Organize top-level PDFs into named review cycles
