@@ -213,6 +213,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .side-tabs button.active { color: var(--ink); }
 .side-tabs button.active::after { content: ""; height: 2px; position: absolute; left: 0; right: 0; bottom: -1px; background: var(--blue); }
 .side-content { min-height: 0; flex: 1; }
+.side-view { height: 100%; }
 .review-panel, .chat-panel { height: 100%; min-height: 0; display: flex; flex-direction: column; }
 .panel-heading { min-height: 91px; flex: none; display: flex; align-items: flex-start; justify-content: space-between; padding: 24px 28px 18px; }
 .panel-heading .eyebrow { margin-bottom: 7px; font-size: 9px; }
@@ -306,6 +307,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .message.user .message-role { color: var(--blue); }
 .message.assistant { padding-left: 15px; border-left: 2px solid var(--amber); }
 .citation { display: inline; margin: 0 2px; padding: 1px 4px; border: 0; border-radius: 2px; background: var(--amber-soft); color: var(--amber-ink); font: 500 10px/1.4 var(--font-mono), monospace; vertical-align: 1px; }
+.citation.unverified { text-decoration: underline dotted; text-underline-offset: 2px; }
 .citation.invalid { opacity: .65; text-decoration: line-through; cursor: help; }
 .thinking { color: var(--slate); }
 .thinking::after { content: "…"; animation: pulse 1.2s ease-in-out infinite; }

@@ -32,7 +32,7 @@ import {
 import { diffWordsWithSpace } from "diff";
 import Image from "next/image";
 import Link from "next/link";
-import { KeyboardEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { KeyboardEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import rehypeKatex from "rehype-katex";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -62,7 +62,7 @@ import {
 type WorkspaceTab = "review" | "chat";
 type MobileView = "papers" | "paper" | WorkspaceTab;
 type Review = Record<string, string>;
-type Message = { role: "user" | "assistant"; content: string };
+type Message = { role: "user" | "assistant"; content: string; pages?: number[] };
 type ExtractionStatus = "idle" | "extracting" | "ready" | "error";
 type PolishRequest = { controller: AbortController; timedOut: boolean };
 type DiffChange = { value: string; added?: boolean; removed?: boolean };
@@ -298,8 +298,8 @@ function normalizeLatexDelimiters(text: string) {
     .replace(/\\\(([^\n]*?)\\\)/g, (_, math: string) => `$${math.trim()}$`);
 }
 
-function MarkdownMessage({ children, onPage, availablePages }: { children: string; onPage: (page: number) => void; availablePages: number[] }) {
-  const markdown = linkifyCitations(normalizeLatexDelimiters(children), availablePages);
+function MarkdownMessage({ children, onPage, availablePages, groundedPages }: { children: string; onPage: (page: number) => void; availablePages: number[]; groundedPages?: number[] }) {
+  const markdown = linkifyCitations(normalizeLatexDelimiters(children), availablePages, groundedPages);
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath]}
@@ -307,9 +307,12 @@ function MarkdownMessage({ children, onPage, availablePages }: { children: strin
       components={{
         a: ({ href, children: linkChildren }) => {
           const page = href?.match(/^#paper-page-(\d+)$/)?.[1];
+          const unverifiedPage = href?.match(/^#unverified-paper-page-(\d+)$/)?.[1];
           const invalidPage = href?.match(/^#invalid-paper-page-(\d+)$/)?.[1];
           return page ? (
             <button className="citation" type="button" onClick={() => onPage(Number(page))}>{linkChildren}</button>
+          ) : unverifiedPage ? (
+            <button className="citation unverified" type="button" title="This page exists, but it was not supplied as evidence for this answer" onClick={() => onPage(Number(unverifiedPage))}>{linkChildren}</button>
           ) : invalidPage ? (
             <span className="citation invalid" title="This citation includes pages that are not available in the extracted paper">{linkChildren}</span>
           ) : (
@@ -323,6 +326,12 @@ function MarkdownMessage({ children, onPage, availablePages }: { children: strin
   );
 }
 
+type ChatStreamEvent =
+  | { type: "status"; status: "waiting" | "reasoning" | "writing"; pages?: number[] }
+  | { type: "content"; text: string }
+  | { type: "error"; message: string }
+  | { type: "done"; metrics?: Record<string, number> };
+
 function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, connection, messages, setMessages, onPage }: {
   paperText: string;
   isLocal: boolean;
@@ -335,16 +344,26 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
 }) {
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [chatStatus, setChatStatus] = useState("");
   const [error, setError] = useState("");
   const [hasConsented, setHasConsented] = useState(!isLocal);
   const abortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const availablePages = getAvailablePageNumbers(paperText);
+  const availablePages = useMemo(() => getAvailablePageNumbers(paperText), [paperText]);
   const suggestions = ["What is the central contribution?", "Explain the evaluation setup.", "Which limitations do the authors acknowledge?"];
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: isSending ? "auto" : "smooth" });
+  }, [isSending, messages]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      abortRef.current?.abort();
+    };
+  }, []);
 
   async function sendMessage(value: string) {
     const question = value.trim();
@@ -354,9 +373,31 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
     setMessages([...nextMessages, { role: "assistant", content: "" }]);
     setInput("");
     setError("");
+    setChatStatus("Finding relevant pages");
     setIsSending(true);
     const controller = new AbortController();
     abortRef.current = controller;
+    let answer = "";
+    let responsePages: number[] = [];
+    let renderFrame = 0;
+
+    const renderAnswer = () => {
+      renderFrame = 0;
+      if (mountedRef.current) setMessages([...nextMessages, { role: "assistant", content: answer, pages: responsePages.length ? responsePages : availablePages }]);
+    };
+
+    const handleEvent = (event: ChatStreamEvent) => {
+      if (event.type === "error") throw new Error(event.message);
+      if (event.type === "status") {
+        const labels = { waiting: "Waiting for model", reasoning: "Model is reasoning", writing: "Writing answer" };
+        if (event.pages?.length) responsePages = event.pages;
+        if (mountedRef.current) setChatStatus(labels[event.status]);
+      }
+      if (event.type === "content") {
+        answer += event.text;
+        if (!renderFrame) renderFrame = window.requestAnimationFrame(renderAnswer);
+      }
+    };
 
     try {
       const response = await fetch("/api/chat", {
@@ -365,7 +406,7 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
           "Content-Type": "application/json",
           ...(connection.apiKey ? { "X-OpenRouter-Key": connection.apiKey } : {}),
         },
-        body: JSON.stringify({ paperText: paperText || undefined, model: connection.model || undefined, messages: nextMessages }),
+        body: JSON.stringify({ paperText: paperText || undefined, model: connection.model || undefined, messages: nextMessages.slice(-8) }),
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -376,20 +417,35 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
       const reader = response.body?.getReader();
       if (!reader) throw new Error("The assistant returned an empty response.");
       const decoder = new TextDecoder();
-      let answer = "";
+      let buffer = "";
       while (true) {
         const { done, value: chunk } = await reader.read();
+        buffer += decoder.decode(chunk, { stream: !done });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.trim()) handleEvent(JSON.parse(line) as ChatStreamEvent);
+        }
         if (done) break;
-        answer += decoder.decode(chunk, { stream: true });
-        setMessages([...nextMessages, { role: "assistant", content: answer }]);
       }
+      if (buffer.trim()) handleEvent(JSON.parse(buffer) as ChatStreamEvent);
+      if (!answer) throw new Error("The selected model returned an empty response.");
+      if (renderFrame) window.cancelAnimationFrame(renderFrame);
+      renderAnswer();
     } catch (caught) {
-      if ((caught as Error).name !== "AbortError") {
-        setMessages(nextMessages);
+      if (renderFrame) window.cancelAnimationFrame(renderFrame);
+      if (!mountedRef.current) return;
+      if ((caught as Error).name === "AbortError") {
+        setMessages(answer ? [...nextMessages, { role: "assistant", content: answer, pages: responsePages.length ? responsePages : availablePages }] : nextMessages);
+      } else {
+        setMessages(answer ? [...nextMessages, { role: "assistant", content: answer, pages: responsePages.length ? responsePages : availablePages }] : nextMessages);
         setError(caught instanceof Error ? caught.message : "The assistant could not answer.");
       }
     } finally {
-      setIsSending(false);
+      if (mountedRef.current) {
+        setChatStatus("");
+        setIsSending(false);
+      }
       abortRef.current = null;
     }
   }
@@ -453,7 +509,7 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
             <div className={`message ${message.role}`} key={`${message.role}-${index}`}>
               <span className="message-role">{message.role === "user" ? "You" : "Margin"}</span>
               <div className="message-content">
-                {message.content ? <MarkdownMessage onPage={onPage} availablePages={availablePages}>{message.content}</MarkdownMessage> : <span className="thinking">Reading the paper</span>}
+                {message.content ? <MarkdownMessage onPage={onPage} availablePages={availablePages} groundedPages={message.pages}>{message.content}</MarkdownMessage> : <span className="thinking">{chatStatus || "Reading the paper"}</span>}
               </div>
             </div>
           ))
@@ -637,6 +693,7 @@ export function ReviewDesk() {
   const [paperText, setPaperText] = useState("");
   const [pdfSrc, setPdfSrc] = useState("");
   const [pdfPage, setPdfPage] = useState(1);
+  const [pdfNavigationRevision, setPdfNavigationRevision] = useState(0);
   const [review, setReview] = useState<Review>({});
   const [messages, setMessages] = useState<Message[]>([]);
   const [tab, setTab] = useState<WorkspaceTab>("review");
@@ -773,6 +830,7 @@ export function ReviewDesk() {
       setPaperName(name.replace(/\.pdf$/i, ""));
       setPaperText("");
       setPdfPage(1);
+      setPdfNavigationRevision(0);
       setMessages([]);
       restoreReview(id, configuration);
       setMobileView("paper");
@@ -990,6 +1048,7 @@ export function ReviewDesk() {
   function changePage(page: number) {
     const nextPage = Math.max(1, page);
     setPdfPage(nextPage);
+    setPdfNavigationRevision((revision) => revision + 1);
     setMobileView("paper");
   }
 
@@ -1055,7 +1114,7 @@ export function ReviewDesk() {
     else localStorage.removeItem("margin:openrouter:model");
   }
 
-  const viewerSrc = pdfSrc ? `${pdfSrc}#page=${pdfPage}&view=FitH` : "";
+  const viewerSrc = pdfSrc ? `${pdfSrc}#page=${pdfPage}` : "";
 
   return (
     <main className={`app-shell mobile-${mobileView}`}>
@@ -1165,7 +1224,7 @@ export function ReviewDesk() {
               </div>
             </div>
             <div className="pdf-frame-wrap">
-              <iframe key={viewerSrc} className="pdf-frame" src={viewerSrc} title="OpenReview paper PDF" />
+              <iframe key={`${viewerSrc}:${pdfNavigationRevision}`} className="pdf-frame" src={viewerSrc} title="OpenReview paper PDF" />
               <div className="citation-margin" aria-hidden="true"><span style={{ top: `${Math.min(82, 14 + pdfPage * 3)}%` }}>{pdfPage}</span></div>
             </div>
           </section>
@@ -1176,7 +1235,7 @@ export function ReviewDesk() {
               <TabButton active={tab === "chat"} icon={<MessageSquareText size={15} />} onClick={() => { setTab("chat"); setMobileView("chat"); }}>Ask paper</TabButton>
             </div>
             <div className="side-content">
-              {tab === "review" ? (
+              <div className="side-view" hidden={tab !== "review"}>
                 <ReviewPanel
                   key={paperId}
                   configuration={activeCycle.configuration}
@@ -1190,7 +1249,8 @@ export function ReviewDesk() {
                   reviewed={activeCycle?.reviewed.includes(activePaperName)}
                   onToggleReviewed={activeCycle ? () => void toggleReviewed() : undefined}
                 />
-              ) : (
+              </div>
+              <div className="side-view" hidden={tab !== "chat"}>
                 <ChatPanel
                   key={paperId}
                   paperText={paperText}
@@ -1202,7 +1262,7 @@ export function ReviewDesk() {
                   setMessages={setMessages}
                   onPage={changePage}
                 />
-              )}
+              </div>
             </div>
           </aside>
         </div>

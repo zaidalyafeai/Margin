@@ -28,3 +28,10 @@ test("links valid citations and rejects ranges containing unavailable pages", ()
     "Claim [pp. 2-5](#invalid-paper-page-2)",
   );
 });
+
+test("keeps real but ungrounded PDF pages navigable", () => {
+  assert.equal(
+    linkifyCitations("Claim [p. 5]", [1, 2, 3, 4, 5], [1, 2, 3]),
+    "Claim [p. 5](#unverified-paper-page-5)",
+  );
+});

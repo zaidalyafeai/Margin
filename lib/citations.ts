@@ -26,22 +26,30 @@ export function formatPageNumbers(pages: number[]) {
   return ranges.join(", ");
 }
 
-function citationTarget(label: string, availablePages: Set<number>) {
+function includesRange(label: string, pages: Set<number>) {
   const numbers = [...label.matchAll(/\d+/g)].map((match) => Number(match[0]));
   const start = numbers[0];
   const end = numbers[1] ?? start;
   const rangeLength = end - start + 1;
-  let isValid = Number.isSafeInteger(start) && Number.isSafeInteger(end) && rangeLength > 0 && rangeLength <= availablePages.size;
+  let includesEveryPage = Number.isSafeInteger(start) && Number.isSafeInteger(end) && rangeLength > 0 && rangeLength <= pages.size;
 
-  for (let page = start; isValid && page <= end; page += 1) {
-    if (!availablePages.has(page)) isValid = false;
+  for (let page = start; includesEveryPage && page <= end; page += 1) {
+    if (!pages.has(page)) includesEveryPage = false;
   }
-
-  return isValid ? `#paper-page-${start}` : `#invalid-paper-page-${start}`;
+  return { includesEveryPage, start };
 }
 
-export function linkifyCitations(text: string, availablePageNumbers: number[]) {
+function citationTarget(label: string, availablePages: Set<number>, groundedPages: Set<number>) {
+  const available = includesRange(label, availablePages);
+  if (!available.includesEveryPage) return `#invalid-paper-page-${available.start}`;
+  return includesRange(label, groundedPages).includesEveryPage
+    ? `#paper-page-${available.start}`
+    : `#unverified-paper-page-${available.start}`;
+}
+
+export function linkifyCitations(text: string, availablePageNumbers: number[], groundedPageNumbers = availablePageNumbers) {
   const availablePages = new Set(availablePageNumbers);
+  const groundedPages = new Set(groundedPageNumbers);
   return text.replace(/\[([^\]\n]+)\](?!\()/g, (group, inner: string) => {
     if (!/pp?\./i.test(inner)) return group;
     const itemPattern = new RegExp(CITATION_ITEM_PATTERN.source, CITATION_ITEM_PATTERN.flags);
@@ -50,7 +58,7 @@ export function linkifyCitations(text: string, availablePageNumbers: number[]) {
     if (!items.length) return group;
     const links = items.map((item) => {
       const label = item.trim();
-      return `[${label}](${citationTarget(label, availablePages)})`;
+      return `[${label}](${citationTarget(label, availablePages, groundedPages)})`;
     });
     if (links.length === 1) return links[0];
     let cursor = 0;
