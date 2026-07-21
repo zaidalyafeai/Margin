@@ -199,6 +199,11 @@ function ReviewPanel({
         </div>
       </div>
 
+      <p className="ethics-note review-ethics-note" role="note">
+        <ShieldAlert size={12} />
+        <span><strong>Not a replacement for reviewers.</strong> Margin does not review papers for you — AI features assist with reading and prose only, and every judgment remains your responsibility as the human reviewer.</span>
+      </p>
+
       <div className="review-fields">
         {configuration.fields.map((field, index) => {
           const isCollapsed = collapsed.includes(field.id);
