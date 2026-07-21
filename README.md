@@ -1,5 +1,8 @@
 # Margin
 
+> [!CAUTION]
+> $\textcolor{red}{\textsf{Margin is not a replacement for reviewers — it only assists them. You must write the review yourself.}}$
+
 Margin is a browser-based workspace for reviewing research papers. Open a folder of PDFs, move through a review cycle, write structured feedback, and ask questions grounded in each paper.
 
 ## Snapshot
