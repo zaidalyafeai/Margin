@@ -11,5 +11,6 @@ Downloaded from the organizations' official websites on July 19, 2026.
 - `eccv.svg`: https://eccv.ecva.net/static/core/img/eccv-navbar-logo.svg
 - `aaai.jpg`: https://aaai.org/wp-content/uploads/2023/09/aaai-logotext_blue.jpg
 - `aistats.svg`: https://virtual.aistats.org/static/core/img/aistats-navbar-logo.svg
+- `colm.svg`: https://colmweb.org/static/images/logo.svg
 
 Conference names and marks belong to their respective organizations. Their inclusion does not imply affiliation or endorsement.
