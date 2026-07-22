@@ -32,7 +32,7 @@ Each review cycle uses venue-specific review fields. Margin currently supports:
 <p align="center">
   <img src="./public/venues/acl-arr.png" alt="ACL ARR" height="50">&nbsp;&nbsp;&nbsp;&nbsp;
   <img src="./public/venues/iclr.svg" alt="ICLR" height="50">&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="./public/venues/neurips.svg" alt="NeurIPS" height="50">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="./public/venues/neurips.svg" alt="NeurIPS" height="55">&nbsp;&nbsp;&nbsp;&nbsp;
 </p>
 <p align="center">
   <img src="./public/venues/iccv.svg" alt="ICCV" height="50">&nbsp;&nbsp;&nbsp;&nbsp;
