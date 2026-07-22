@@ -78,7 +78,7 @@ PDF uploads are limited to 30 MB. Extracted text used for chat is limited to 100
 
 ## Privacy
 
-Review cycles, drafts, progress, and extracted paper text are stored in browser storage. PDFs are read from the selected folder and sent to the app's extraction route for processing, but are not persisted there. When an AI feature is used, the relevant paper or review text is sent to the configured model provider.
+Review cycles, drafts, progress, and extracted paper text are stored in browser storage. PDFs are read from the selected folder and sent to the app's extraction route for processing, but are not persisted there. When an AI feature is used, the relevant paper or review text is sent to the configured model provider. Ask Paper requests enforce OpenRouter Zero Data Retention (ZDR), so a selected model will be unavailable if it has no ZDR-compatible provider endpoint.
 
 OpenRouter keys entered in the interface are kept in session storage and sent only to this app's API routes for provider requests.
 

@@ -67,6 +67,7 @@ export async function POST(request: Request) {
             signal: upstreamController.signal,
             body: JSON.stringify({
               model,
+              provider: { zdr: true },
               temperature: 0.2,
               stream: true,
               messages: [
