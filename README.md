@@ -29,18 +29,25 @@ Margin is a browser-based workspace for reviewing research papers. Open a folder
 
 Each review cycle uses venue-specific review fields. Margin currently supports:
 
-| Venue | Name |
-| :---: | --- |
-| <img src="./public/venues/acl-arr.png" alt="ACL ARR logo" height="40"> | ACL ARR |
-| <img src="./public/venues/iclr.svg" alt="ICLR logo" height="40"> | ICLR |
-| <img src="./public/venues/neurips.svg" alt="NeurIPS logo" height="40"> | NeurIPS |
-| <img src="./public/venues/icml.svg" alt="ICML logo" height="40"> | ICML |
-| <img src="./public/venues/cvpr.svg" alt="CVPR logo" height="40"> | CVPR |
-| <img src="./public/venues/iccv.svg" alt="ICCV logo" height="40"> | ICCV |
-| <img src="./public/venues/eccv.svg" alt="ECCV logo" height="40"> | ECCV |
-| <img src="./public/venues/aaai.jpg" alt="AAAI logo" height="40"> | AAAI |
-| <img src="./public/venues/aistats.svg" alt="AISTATS logo" height="40"> | AISTATS |
-| <img src="./public/venues/colm.svg" alt="COLM logo" height="40"> | COLM |
+<p align="center">
+  <img src="./public/venues/acl-arr.png" alt="ACL ARR" height="50">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="./public/venues/iclr.svg" alt="ICLR" height="50">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="./public/venues/neurips.svg" alt="NeurIPS" height="50">&nbsp;&nbsp;&nbsp;&nbsp;
+</p>
+<p align="center">
+  <img src="./public/venues/iccv.svg" alt="ICCV" height="50">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="./public/venues/eccv.svg" alt="ECCV" height="50">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="./public/venues/icml.svg" alt="ICML" height="50">
+  
+</p>
+<p align="center">
+  <img src="./public/venues/cvpr.svg" alt="CVPR" height="50">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="./public/venues/aistats.svg" alt="AISTATS" height="50">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="./public/venues/colm.svg" alt="COLM" height="50">
+</p>
+<p align="center">
+  <!-- <img src="./public/venues/aaai.jpg" alt="AAAI" height="50"> -->
+</p>
 
 Conference names and marks belong to their respective organizations. Their inclusion does not imply affiliation or endorsement.
 
