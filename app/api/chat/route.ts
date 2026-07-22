@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = (await request.json()) as { paperText?: string; model?: string; messages?: ChatMessage[] };
+    const body = (await request.json()) as { paperText?: string; model?: string; reasoningEnabled?: boolean; messages?: ChatMessage[] };
     if (!body.paperText || !Array.isArray(body.messages) || body.messages.length === 0) {
       return Response.json({ error: "A paper and question are required." }, { status: 400 });
     }
@@ -68,6 +68,7 @@ export async function POST(request: Request) {
             body: JSON.stringify({
               model,
               provider: { zdr: true },
+              reasoning: body.reasoningEnabled === false ? { effort: "none" } : { enabled: true },
               temperature: 0.2,
               stream: true,
               messages: [
@@ -98,7 +99,7 @@ export async function POST(request: Request) {
               return;
             }
             if (event.type === "reasoning") {
-              if (!hasContent && !reasoningReported) send({ type: "status", status: "reasoning" });
+              if (body.reasoningEnabled !== false && !hasContent && !reasoningReported) send({ type: "status", status: "reasoning" });
               reasoningReported = true;
               continue;
             }

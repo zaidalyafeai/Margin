@@ -332,12 +332,14 @@ type ChatStreamEvent =
   | { type: "error"; message: string }
   | { type: "done"; metrics?: Record<string, number> };
 
-function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, connection, messages, setMessages, onPage }: {
+function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, connection, reasoningEnabled, onReasoningChange, messages, setMessages, onPage }: {
   paperText: string;
   isLocal: boolean;
   extractionStatus: ExtractionStatus;
   extractionError: string;
   connection: OpenRouterConnection;
+  reasoningEnabled: boolean;
+  onReasoningChange: (enabled: boolean) => void;
   messages: Message[];
   setMessages: (messages: Message[]) => void;
   onPage: (page: number) => void;
@@ -389,7 +391,7 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
     const handleEvent = (event: ChatStreamEvent) => {
       if (event.type === "error") throw new Error(event.message);
       if (event.type === "status") {
-        const labels = { waiting: "Waiting for model", reasoning: "Model is reasoning", writing: "Writing answer" };
+        const labels = { waiting: "Reading between the lines", reasoning: "Connecting the dots", writing: "Writing answer" };
         if (event.pages?.length) responsePages = event.pages;
         if (mountedRef.current) setChatStatus(labels[event.status]);
       }
@@ -406,7 +408,7 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
           "Content-Type": "application/json",
           ...(connection.apiKey ? { "X-OpenRouter-Key": connection.apiKey } : {}),
         },
-        body: JSON.stringify({ paperText: paperText || undefined, model: connection.model || undefined, messages: nextMessages.slice(-8) }),
+        body: JSON.stringify({ paperText: paperText || undefined, model: connection.model || undefined, reasoningEnabled, messages: nextMessages.slice(-8) }),
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -465,6 +467,17 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
           <h2>Ask the paper</h2>
         </div>
         <div className="chat-heading-actions">
+          <button
+            className="reasoning-switch"
+            type="button"
+            role="switch"
+            aria-checked={reasoningEnabled}
+            disabled={isSending}
+            onClick={() => onReasoningChange(!reasoningEnabled)}
+          >
+            <span>Reasoning</span>
+            <span className="switch-track" aria-hidden="true"><span /></span>
+          </button>
           {messages.length > 0 && !isSending && (
             <button className="icon-button" type="button" aria-label="Clear conversation" onClick={() => setMessages([])}><RotateCcw size={16} /></button>
           )}
@@ -509,7 +522,13 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
             <div className={`message ${message.role}`} key={`${message.role}-${index}`}>
               <span className="message-role">{message.role === "user" ? "You" : "Margin"}</span>
               <div className="message-content">
-                {message.content ? <MarkdownMessage onPage={onPage} availablePages={availablePages} groundedPages={message.pages}>{message.content}</MarkdownMessage> : <span className="thinking">{chatStatus || "Reading the paper"}</span>}
+                {message.content ? <MarkdownMessage onPage={onPage} availablePages={availablePages} groundedPages={message.pages}>{message.content}</MarkdownMessage> : (
+                  <span className="thinking">
+                    {chatStatus === "Reading between the lines" && <BookOpen className="reading-icon" size={15} aria-hidden="true" />}
+                    {chatStatus === "Connecting the dots" && <Sparkles className="reasoning-icon" size={15} aria-hidden="true" />}
+                    {chatStatus || "Reading the paper"}
+                  </span>
+                )}
               </div>
             </div>
           ))
@@ -712,6 +731,7 @@ export function ReviewDesk() {
   const [creatingCycle, setCreatingCycle] = useState(false);
   const [fallbackCycleId, setFallbackCycleId] = useState("");
   const [openRouterConnection, setOpenRouterConnection] = useState<OpenRouterConnection>({ apiKey: "", model: "" });
+  const [reasoningEnabled, setReasoningEnabled] = useState(true);
   const [showProviderSettings, setShowProviderSettings] = useState(false);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const loadingRef = useRef(false);
@@ -734,6 +754,7 @@ export function ReviewDesk() {
         apiKey: sessionStorage.getItem("margin:openrouter:key") || "",
         model: localStorage.getItem("margin:openrouter:model") || "",
       });
+      setReasoningEnabled(localStorage.getItem("margin:openrouter:reasoning") !== "false");
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
@@ -1114,6 +1135,11 @@ export function ReviewDesk() {
     else localStorage.removeItem("margin:openrouter:model");
   }
 
+  function updateReasoningEnabled(enabled: boolean) {
+    setReasoningEnabled(enabled);
+    localStorage.setItem("margin:openrouter:reasoning", String(enabled));
+  }
+
   const viewerSrc = pdfSrc ? `${pdfSrc}#page=${pdfPage}` : "";
 
   return (
@@ -1258,6 +1284,8 @@ export function ReviewDesk() {
                   extractionStatus={extractionStatus}
                   extractionError={extractionError}
                   connection={openRouterConnection}
+                  reasoningEnabled={reasoningEnabled}
+                  onReasoningChange={updateReasoningEnabled}
                   messages={messages}
                   setMessages={setMessages}
                   onPage={changePage}
