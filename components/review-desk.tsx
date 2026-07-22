@@ -332,7 +332,7 @@ type ChatStreamEvent =
   | { type: "error"; message: string }
   | { type: "done"; metrics?: Record<string, number> };
 
-function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, connection, reasoningEnabled, onReasoningChange, messages, setMessages, onPage }: {
+function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, connection, reasoningEnabled, onReasoningChange, hasConsented, onConsent, messages, setMessages, onPage }: {
   paperText: string;
   isLocal: boolean;
   extractionStatus: ExtractionStatus;
@@ -340,6 +340,8 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
   connection: OpenRouterConnection;
   reasoningEnabled: boolean;
   onReasoningChange: (enabled: boolean) => void;
+  hasConsented: boolean;
+  onConsent: () => void;
   messages: Message[];
   setMessages: (messages: Message[]) => void;
   onPage: (page: number) => void;
@@ -348,7 +350,6 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
   const [isSending, setIsSending] = useState(false);
   const [chatStatus, setChatStatus] = useState("");
   const [error, setError] = useState("");
-  const [hasConsented, setHasConsented] = useState(!isLocal);
   const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -492,7 +493,7 @@ function ChatPanel({ paperText, isLocal, extractionStatus, extractionError, conn
             <h3>Before asking the paper</h3>
             <p>Extracted text is cached only in this browser. It is not sent to the configured model provider until you enable chat.</p>
             <p>Confirm that your venue permits external LLM use and that you accept its data policy.</p>
-            <button className="primary-button" type="button" onClick={() => setHasConsented(true)}>I understand, enable chat</button>
+            <button className="primary-button" type="button" onClick={onConsent}>I understand, enable chat</button>
           </div>
         ) : isLocal && extractionStatus === "extracting" ? (
           <div className="chat-empty extraction-state">
@@ -714,7 +715,7 @@ export function ReviewDesk() {
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfNavigationRevision, setPdfNavigationRevision] = useState(0);
   const [review, setReview] = useState<Review>({});
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [chatHistories, setChatHistories] = useState<Record<string, Message[]>>({});
   const [tab, setTab] = useState<WorkspaceTab>("review");
   const [mobileView, setMobileView] = useState<MobileView>("paper");
   const [loadError, setLoadError] = useState("");
@@ -732,6 +733,7 @@ export function ReviewDesk() {
   const [fallbackCycleId, setFallbackCycleId] = useState("");
   const [openRouterConnection, setOpenRouterConnection] = useState<OpenRouterConnection>({ apiKey: "", model: "" });
   const [reasoningEnabled, setReasoningEnabled] = useState(true);
+  const [hasChatConsent, setHasChatConsent] = useState(false);
   const [showProviderSettings, setShowProviderSettings] = useState(false);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const loadingRef = useRef(false);
@@ -743,6 +745,8 @@ export function ReviewDesk() {
   const extractionRequestRef = useRef(0);
 
   const activeCycle = cycles.find((cycle) => cycle.id === activeCycleId);
+  const messages = paperId ? chatHistories[paperId] || [] : [];
+  const hasChatHistory = Object.values(chatHistories).some((history) => history.length > 0);
 
   useEffect(() => {
     void listReviewCycles().then(setCycles).catch(() => setLoadError("Saved review cycles could not be loaded."));
@@ -755,11 +759,22 @@ export function ReviewDesk() {
         model: localStorage.getItem("margin:openrouter:model") || "",
       });
       setReasoningEnabled(localStorage.getItem("margin:openrouter:reasoning") !== "false");
+      setHasChatConsent(sessionStorage.getItem("margin:chat:consent") === "true");
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => () => { if (pdfSrc.startsWith("blob:")) URL.revokeObjectURL(pdfSrc); }, [pdfSrc]);
+
+  useEffect(() => {
+    if (!hasChatHistory) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [hasChatHistory]);
 
   useEffect(() => {
     if (!paperId) return;
@@ -852,7 +867,6 @@ export function ReviewDesk() {
       setPaperText("");
       setPdfPage(1);
       setPdfNavigationRevision(0);
-      setMessages([]);
       restoreReview(id, configuration);
       setMobileView("paper");
       const requestId = ++extractionRequestRef.current;
@@ -1034,6 +1048,9 @@ export function ReviewDesk() {
     }
     setCycles((current) => current.filter((item) => item.id !== cycle.id));
     cycleFilesRef.current.delete(cycle.id);
+    setChatHistories((current) => Object.fromEntries(
+      Object.entries(current).filter(([id]) => !id.startsWith(`cycle:${cycle.id}:`)),
+    ));
     if (activeCycleId === cycle.id) {
       extractionRequestRef.current += 1;
       setActiveCycleId("");
@@ -1044,7 +1061,6 @@ export function ReviewDesk() {
       setPdfSrc("");
       reviewRef.current = {};
       setReview({});
-      setMessages([]);
     }
   }
 
@@ -1059,7 +1075,6 @@ export function ReviewDesk() {
     setPdfSrc("");
     reviewRef.current = {};
     setReview({});
-    setMessages([]);
     setLoadError("");
     setShowCycleManager(false);
     setTab("review");
@@ -1138,6 +1153,21 @@ export function ReviewDesk() {
   function updateReasoningEnabled(enabled: boolean) {
     setReasoningEnabled(enabled);
     localStorage.setItem("margin:openrouter:reasoning", String(enabled));
+  }
+
+  function consentToChat() {
+    setHasChatConsent(true);
+    sessionStorage.setItem("margin:chat:consent", "true");
+  }
+
+  function updateMessages(nextMessages: Message[]) {
+    if (!paperId) return;
+    setChatHistories((current) => {
+      const next = { ...current };
+      if (nextMessages.length) next[paperId] = nextMessages;
+      else delete next[paperId];
+      return next;
+    });
   }
 
   const viewerSrc = pdfSrc ? `${pdfSrc}#page=${pdfPage}` : "";
@@ -1286,8 +1316,10 @@ export function ReviewDesk() {
                   connection={openRouterConnection}
                   reasoningEnabled={reasoningEnabled}
                   onReasoningChange={updateReasoningEnabled}
+                  hasConsented={hasChatConsent}
+                  onConsent={consentToChat}
                   messages={messages}
-                  setMessages={setMessages}
+                  setMessages={updateMessages}
                   onPage={changePage}
                 />
               </div>
